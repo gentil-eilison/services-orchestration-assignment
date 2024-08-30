@@ -8,6 +8,7 @@ class PurchaseProductView(views.APIView):
     def post(self, request, *args, **kwargs):
         product_id = request.data.get('product_id', 0)
         quantity = request.data.get('quantity', 0)
+        price = request.data.get('price', 0)
 
         # 1. Verificar disponibilidade do estoque no Inventory Service
         inventory_response = requests.get("http://localhost:8002/api/inventory/check/", json={
@@ -55,7 +56,23 @@ class PurchaseProductView(views.APIView):
 
         
 
-        #TODO 4. Processar o pagamento no Payment Service
-    
+        #4. Processar o pagamento no Payment Service
+        try:
+            payment_processing_response = requests.post('http://localhost:8003/api/payment/', json={
+                'order_id': order_id,
+                'value': int(price) * int(quantity)
+            })
 
-        return Response({'status': 'Purchase Completed'})
+            payment_processing_response.raise_for_status()
+        except requests.RequestException:
+            try:
+                inventory_return_response = requests.put('http://localhost:8002/api/inventory/return/', json={
+                        'product_id': product_id,
+                        'quantity': quantity
+                    })
+                inventory_return_response.raise_for_status()
+            except requests.RequestException:
+                return Response({'error': 'Failed to return item'})
+            return Response({ 'error': 'Failed to completed purchase' })
+
+        return Response({'status': 'Purchase completed'})
